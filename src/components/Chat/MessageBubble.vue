@@ -1,8 +1,6 @@
 <template>
   <div class="flex w-full mb-6" :class="isUser ? 'justify-end' : 'justify-start'">
     <div class="flex max-w-[95%] md:max-w-[85%] gap-3" :class="{ 'flex-row-reverse': isUser }">
-
-      <!-- 头像 -->
       <div class="flex-shrink-0 mt-1">
         <div class="w-8 h-8 rounded-full flex items-center justify-center overflow-hidden shadow-sm border border-gray-200"
              :class="isUser ? 'bg-blue-600' : 'bg-white'">
@@ -11,7 +9,6 @@
         </div>
       </div>
 
-      <!-- 消息主体 -->
       <div class="flex flex-col min-w-0 max-w-full">
         <div
             class="relative px-5 py-3 rounded-2xl shadow-sm overflow-hidden text-sm leading-relaxed"
@@ -21,7 +18,6 @@
               : 'bg-white border border-gray-100 text-gray-800 rounded-tl-none'
           ]"
         >
-          <!-- 深度思考区 -->
           <div v-if="!isUser && message.thinkingContent" class="mb-3 pb-3 border-b border-gray-100">
             <div class="text-xs font-bold text-gray-400 mb-1 flex items-center gap-1 select-none cursor-pointer hover:text-blue-500 transition-colors" @click="toggleThinking">
               <span>🧠 深度思考</span>
@@ -32,7 +28,6 @@
             </div>
           </div>
 
-          <!-- Markdown 内容渲染区 -->
           <div
               v-if="message.content"
               class="markdown-content prose prose-sm max-w-none break-words"
@@ -40,7 +35,6 @@
               v-html="renderedContent"
           ></div>
 
-          <!-- Loading 光标 -->
           <div v-if="message.isLoading && !message.content" class="flex gap-1 py-1 h-6 items-center">
             <span class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"></span>
             <span class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-100"></span>
@@ -56,12 +50,13 @@
 import { computed, ref } from 'vue';
 import type { ChatMessage } from '../../types/chat';
 import MarkdownIt from 'markdown-it';
-import mk from 'markdown-it-katex';
+import tm from 'markdown-it-texmath';
+import katex from 'katex';
 import hljs from 'highlight.js';
 
-// 引入样式
 import 'katex/dist/katex.min.css';
 import 'highlight.js/styles/atom-one-light.css';
+import 'markdown-it-texmath/css/texmath.css';
 
 const props = defineProps<{
   message: ChatMessage;
@@ -74,7 +69,7 @@ const toggleThinking = () => {
   isThinkingCollapsed.value = !isThinkingCollapsed.value;
 };
 
-// --- 初始化 Markdown 解析器 ---
+// --- Markdown & Katex 配置 ---
 const md = new MarkdownIt({
   html: false,
   linkify: true,
@@ -90,73 +85,60 @@ const md = new MarkdownIt({
   }
 });
 
-md.use(mk);
+md.use(tm, {
+  engine: katex,
+  delimiters: 'dollars',
+  katexOptions: {
+    macros: { '\\RR': '\\mathbb{R}' },
+    throwOnError: false,
+    errorColor: '#cc0000',
+  }
+});
 
 /**
- * 文本预处理：清洗、去重和归一化
+ * 终极预处理函数
+ * 修复：\quadX, \pift, ---###, 以及 $$ 换行问题
  */
 const preprocessMarkdown = (text: string) => {
   if (!text) return '';
-  let processed = text;
 
-  // 1. 清理零宽字符等不可见干扰项
-  processed = processed.replace(/[\u200b\u200c\u200d\uFEFF]/g, '');
+  // 1. 【代码块保护】先把代码块提取出来，防止误伤
+  const codeBlocks: string[] = [];
+  let pText = text.replace(/(`{3,}[\s\S]*?`{3,}|`[^`\n]+`)/g, (match) => {
+    codeBlocks.push(match);
+    return `__CODE_BLOCK_${codeBlocks.length - 1}__`;
+  });
 
-  // 2. 修复粘连文本 (例如 "dtX(f)=") - 强制换行
-  processed = processed.replace(/(dt|dx|df|d\w|\)|\])\s*([A-Z][\w\(\)\[\]]*\s*=|\\)/g, '$1\n$2');
+  // --- 以下操作仅针对非代码部分 ---
 
-  // 3. 归一化公式定界符
-  processed = processed.replace(/\\\[/g, '$$');
-  processed = processed.replace(/\\\]/g, '$$');
-  processed = processed.replace(/\\\(/g, '$');
-  processed = processed.replace(/\\\)/g, '$');
+  // 2. 【核心修复 A】解决 LaTeX 命令粘连问题 (针对截图中的红色报错)
+  // 解释：查找 \quad, \pi, \int 等常用命令，如果后面紧跟字母或数字，强制加空格
+  // 这将修复 \quadX -> \quad X 和 \pift -> \pi ft
+  pText = pText.replace(/\\(quad|pi|alpha|beta|gamma|delta|theta|lambda|sigma|omega|mu|nu|tau|rho|phi|chi|psi|int|sum|prod|lim|infty)([a-zA-Z0-9])/g, '\\$1 $2');
 
-  // 4. Unicode 数学符号转 LaTeX
-  const unicodeMap: Record<string, string> = {
-    '∫': '\\int ', '∬': '\\iint ', '∞': '\\infty', 'π': '\\pi', '⋅': '\\cdot ',
-    '×': '\\times ', '≈': '\\approx ', '≠': '\\neq ', '≤': '\\leq ', '≥': '\\geq ', '−': '-',
-  };
-  processed = processed.replace(/[∫∬∞π⋅×≈≠≤≥−]/g, (char) => unicodeMap[char] || char);
+  // 3. 【核心修复 B】解决 Markdown 结构粘连问题 (针对截图中的 ---###)
+  // 确保 ### 标题前有两个换行
+  pText = pText.replace(/([^\n])\s*(#{1,6}\s)/g, '$1\n\n$2');
+  // 确保 --- 分割线前有两个换行
+  pText = pText.replace(/([^\n])\s*(---)/g, '$1\n\n$3');
+  // 解决 $---### 这种极端情况（美元符号粘着分割线）
+  pText = pText.replace(/(\$)\s*(---)/g, '$1\n\n$2');
 
-  // 5. 确保块级公式独占一行 (Markdown 解析器要求)
-  processed = processed.replace(/([^\n])\$\$/g, '$1\n$$');
-  processed = processed.replace(/\$\$([^\n])/g, '$$\n$1');
+  // 4. 【核心修复 C】块级公式 $$ 的换行修复
+  // 如果 $$ 紧跟在文字后面，强制换行，使其渲染为块级而不是行内源码
+  pText = pText.replace(/([^\n])\s*\$\$/g, '$1\n$$$$'); // $$ 前加换行
+  pText = pText.replace(/\$\$\s*([^\n])/g, '$$$$\n$1'); // $$ 后加换行
 
-  // 6. 智能去重 (移除内容重复的行)
-  // 解决 AI 偶尔先输出文本公式，紧接着输出 LaTeX 公式的问题
-  const lines = processed.split('\n');
-  const uniqueLines: string[] = [];
+  // 5. 【定界符归一化】兼容 AI 的 \[ \] 和 \( \)
+  pText = pText.replace(/([^\\]|^)\\\[/g, '$1$$$$');
+  pText = pText.replace(/([^\\]|^)\\\]/g, '$1$$$$');
+  pText = pText.replace(/([^\\]|^)\\\(/g, '$1$');
+  pText = pText.replace(/([^\\]|^)\\\)/g, '$1$');
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-    // 取上一行的内容（如果有）
-    const prevLine = uniqueLines.length > 0 ? uniqueLines[uniqueLines.length - 1].trim() : '';
-
-    // 生成简易指纹（只保留字母数字，忽略符号差异）
-    const currFingerprint = line.replace(/[^a-zA-Z0-9]/g, '');
-    const prevFingerprint = prevLine.replace(/[^a-zA-Z0-9]/g, '');
-
-    // 如果指纹长度足够且相同，判断为重复
-    if (currFingerprint.length > 5 && currFingerprint === prevFingerprint) {
-      // 如果当前行是公式($$)而上一行不是，则用当前行替换上一行（保留渲染效果更好的）
-      if (line.includes('$$') && !prevLine.includes('$$')) {
-        uniqueLines.pop();
-        uniqueLines.push(lines[i]);
-      }
-      // 如果上一行已经是公式，当前行是文本，则忽略当前行
-      else if (prevLine.includes('$$') && !line.includes('$$')) {
-        continue;
-      }
-      // 如果都是公式或都是文本，忽略当前行（去重）
-      else {
-        continue;
-      }
-    } else {
-      uniqueLines.push(lines[i]);
-    }
-  }
-
-  return uniqueLines.join('\n');
+  // 6. 【还原代码块】
+  return pText.replace(/__CODE_BLOCK_(\d+)__/g, (_, index) => {
+    return codeBlocks[Number(index)];
+  });
 };
 
 const renderedContent = computed(() => {
@@ -171,23 +153,10 @@ const renderedContent = computed(() => {
 </script>
 
 <style scoped>
+/* 样式保持原样，微调间距 */
 :deep(.prose) {
   font-size: 0.95rem;
-  line-height: 1.6;
-}
-
-:deep(.prose p) {
-  margin-top: 0.5em;
-  margin-bottom: 0.5em;
-}
-
-:deep(.prose blockquote) {
-  font-style: normal;
-  font-weight: 400;
-  color: #555;
-  border-left: 4px solid #e5e7eb;
-  padding-left: 1em;
-  margin: 1em 0;
+  line-height: 1.7;
 }
 
 :deep(.prose pre) {
@@ -195,32 +164,22 @@ const renderedContent = computed(() => {
   border: 1px solid #e2e8f0;
   border-radius: 0.5rem;
   padding: 0.8em;
-  margin: 0.8em 0;
+  margin: 1em 0;
   overflow-x: auto;
-}
-
-:deep(.prose code) {
-  background-color: rgba(0, 0, 0, 0.05);
-  padding: 0.1em 0.3em;
-  border-radius: 0.2em;
-  font-weight: 500;
-  font-size: 0.9em;
-}
-
-:deep(.prose pre code) {
-  background-color: transparent;
-  padding: 0;
-  font-size: 0.85em;
-  color: inherit;
-}
-
-:deep(.katex) {
-  font-size: 1.1em;
 }
 
 :deep(.katex-display) {
-  margin: 1em 0;
   overflow-x: auto;
   overflow-y: hidden;
+  padding: 0.5em 0;
+  margin: 1em 0;
+  max-width: 100%;
+}
+
+/* 红色报错时的兜底样式 */
+:deep(.katex-error) {
+  color: #cc0000;
+  font-family: monospace;
+  font-size: 0.9em;
 }
 </style>
