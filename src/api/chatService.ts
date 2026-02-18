@@ -3,8 +3,49 @@ import type { ChatMessage } from '../types/chat';
 // 基础路径
 const API_BASE_URL = '/api';
 
+/**
+ * [AJAX] 登录接口
+ */
+export async function login(username: string, password: string): Promise<{ token: string, user: any }> {
+    console.log('// [AJAX Request] POST /api/auth/login', { username, password });
+    await new Promise(resolve => setTimeout(resolve, 800));
+    if (username && password) {
+        return {
+            token: 'mock-jwt-token-123456',
+            user: { id: 1, name: username, avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}` }
+        };
+    } else {
+        throw new Error('用户名或密码不能为空');
+    }
+}
+
+/**
+ * [AJAX] 新建会话
+ */
+export async function createNewSession(): Promise<string> {
+    console.log('// [AJAX Request] POST /api/chat/session');
+    await new Promise(resolve => setTimeout(resolve, 300));
+    return 'session-' + Date.now();
+}
+
+/**
+ * [AJAX] 清除记忆
+ */
+export async function clearSessionMemory(sessionId: string): Promise<void> {
+    console.log(`// [AJAX Request] DELETE /api/chat/session/${sessionId}/memory`);
+    await new Promise(resolve => setTimeout(resolve, 500));
+}
+
+/**
+ * 流式对话接口
+ */
 export async function streamChatCompletion(
     messages: ChatMessage[],
+    options: {
+        enableDeepThink: boolean;
+        enableMindMap: boolean;
+        sessionId: string;
+    },
     onChunk: (content: string, sources?: any[]) => void,
     onDone: () => void,
     onError: (err: any) => void
@@ -13,70 +54,83 @@ export async function streamChatCompletion(
         const lastMessage = messages[messages.length - 1];
         const userQuestion = lastMessage?.content || '';
 
-        // 1. 修改请求地址
-        // 假设你的后端 Controller 定义是 @GetMapping("/AnimeMaster/stream")
-        const targetUrl = `${API_BASE_URL}/ai/AnimeMaster/stream?message=${encodeURIComponent(userQuestion)}`;
+        const params = new URLSearchParams({
+            message: userQuestion,
+            sessionId: options.sessionId,
+            deepThink: options.enableDeepThink.toString(),
+            mindMap: options.enableMindMap.toString()
+        });
 
+        const targetUrl = `${API_BASE_URL}/ai/QABot/stream?${params.toString()}`;
         console.log('开始流式请求:', targetUrl);
 
-        // 2. 发起请求
         const response = await fetch(targetUrl, {
-            method: 'GET', // 注意：流式接口通常是 GET，如果是 POST 请自行修改
-            headers: {
-                'Accept': 'text/event-stream', // 告诉后端我想接收流
-            },
+            method: 'GET',
+            headers: { 'Accept': 'text/event-stream' },
         });
 
         if (!response.ok || !response.body) {
             throw new Error(`接口报错: ${response.status} ${response.statusText}`);
         }
 
-        // 3. 初始化流读取器
         const reader = response.body.getReader();
         const decoder = new TextDecoder('utf-8');
+        let buffer = '';
 
-        // 4. 循环读取流数据
         while (true) {
-            // read() 会返回 { done: boolean, value: Uint8Array }
             const { done, value } = await reader.read();
+            if (done) break;
 
-            if (done) {
-                console.log('流式传输结束');
-                break;
-            }
-
-            // 解码二进制数据
             const chunk = decoder.decode(value, { stream: true });
+            buffer += chunk;
 
-            // 5. 处理 SSE 格式数据 (Spring Flux 默认格式)
-            // 后端传来的数据通常长这样: "data:你好\n\ndata:世界\n\n"
-            const lines = chunk.split('\n');
+            const lines = buffer.split('\n');
+            // 保留最后一个可能不完整的行
+            buffer = lines.pop() || '';
 
             for (const line of lines) {
-                // 只处理以 data: 开头的行，并去除空行
+                // 如果是空行，可能是 SSE 的心跳或消息分隔符，跳过
+                if (line.trim() === '') continue;
+
                 if (line.startsWith('data:')) {
-                    // 去掉 "data:" 前缀
-                    const content = line.slice(5);
-
-                    // 如果后端发来的是结束标记 (有些实现会发 [DONE])，可以在这里判断
-                    // if (content.trim() === '[DONE]') break;
-
-                    // 回调给界面显示
-                    if (content) {
-                        onChunk(content, []);
+                    // [修复关键点 1] 不要使用 trim()，因为 token 可能以空格开头或结尾（如 " hello"）
+                    // SSE 规范：如果冒号后有空格，去除第一个空格，保留后续内容
+                    let rawData = line.slice(5);
+                    if (rawData.startsWith(' ')) {
+                        rawData = rawData.slice(1);
                     }
-                }
-                    // 兼容性处理：如果后端没发 standard SSE，而是发原生 raw string
-                // 那么 line 就没有 data: 前缀，直接显示即可
-                else if (line.trim() !== '') {
-                    // 如果你的后端不仅没加 data: 甚至连换行都没加，这里可能要慎重
-                    // 但 Spring WebFlux 这里通常比较规范，为了保险可以加上这句：
-                    onChunk(line, []);
+
+                    // 如果是结束标记
+                    if (rawData.trim() === '[DONE]') continue;
+
+                    try {
+                        // 1. 尝试解析为 JSON
+                        const json = JSON.parse(rawData);
+
+                        let content = '';
+                        if (typeof json === 'string') {
+                            content = json;
+                        } else if (json.content) {
+                            content = json.content; // 标准结构
+                        } else if (json.choices && json.choices[0]?.delta?.content) {
+                            content = json.choices[0].delta.content; // OpenAI 格式
+                        } else if (json.output && json.output.content) {
+                            content = json.output.content;
+                        }
+
+                        if (content) onChunk(content, []);
+
+                    } catch (e) {
+                        // 2. 解析失败则视为纯文本流
+                        // [修复关键点 2] 绝对不要在这里加 '\n'！
+                        // 流式传输的是 token，"你", "好", "吗" 应该直接拼接为 "你好吗"
+                        // 只有当 rawData 本身包含 \n 字符时，才会有换行
+                        onChunk(rawData, []);
+                    }
                 }
             }
         }
 
-        // 6. 结束
         onDone();
 
     } catch (error) {

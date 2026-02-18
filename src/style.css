@@ -1,3 +1,83 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@import url('https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css');
+@import url('https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-light.min.css');
+
+:root {
+    font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+}
+
+body {
+    margin: 0;
+    min-width: 320px;
+    min-height: 100vh;
+}
+
+/* 全局行高修正 */
+.prose {
+    line-height: 1.8 !important;
+    color: #374151;
+}
+
+/* 标题样式 */
+.prose h1, .prose h2, .prose h3 {
+    color: #1f2937;
+    font-weight: 700;
+    margin-top: 1.5em;
+    margin-bottom: 0.8em;
+    line-height: 1.3;
+}
+
+/* --- 引用块 (Blockquote) 样式重构 --- */
+.prose blockquote {
+    font-style: normal;
+    border-left: none; /* 移除原来的蓝色竖条 */
+    background-color: #f8fafc; /* 极淡的背景 */
+    color: #475569;
+    padding: 1rem 1.25rem;
+    border-radius: 0.75rem; /* 圆角 */
+    border: 1px solid #e2e8f0;
+    margin: 1.5em 0;
+    position: relative;
+}
+
+/* 添加一个装饰图标 */
+.prose blockquote::before {
+    content: "📝";
+    display: inline-block;
+    margin-right: 0.5em;
+    font-style: normal;
+}
+
+/* 虚线分割线 */
+.prose hr {
+    margin: 2em 0;
+    border-color: #cbd5e1;
+    border-top-width: 2px;
+    border-style: dashed;
+}
+
+/* 公式样式微调 */
+.prose .katex {
+    font-size: 1.1em;
+    color: #111827;
+}
+
+/* 块级公式 */
+.prose .katex-display {
+    margin: 1.5em 0 !important;
+    padding: 1em 0;
+    background-color: #ffffff;
+    border-radius: 0.5rem;
+    overflow-x: auto;
+    text-align: center;
+}
+
+/* 代码块 */
+.prose pre {
+    background-color: #f1f5f9 !important;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.5rem;
+}
