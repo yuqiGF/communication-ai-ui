@@ -37,6 +37,62 @@ export async function clearSessionMemory(sessionId: string): Promise<void> {
 }
 
 /**
+ * [AJAX] 获取Neo4j知识图谱/思维导图数据 (真实后端接口)
+ */
+export async function fetchNeo4jGraph(keyword: string): Promise<any> {
+    const targetUrl = `${API_BASE_URL}/graph/search?keyword=${encodeURIComponent(keyword)}`;
+    console.log(`// [AJAX Request] GET ${targetUrl}`);
+
+    try {
+        const response = await fetch(targetUrl, {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`图谱接口报错: ${response.status} ${response.statusText}`);
+        }
+
+        // 解析后端返回的 GraphData (包含 nodes 和 edges)
+        const data = await response.json();
+        return data;
+    } catch (error) {
+        console.error('获取知识图谱失败:', error);
+        throw error;
+    }
+}
+
+/**
+ * [AJAX] 扩展图谱节点 (绕过AI，直接查询Neo4j)
+ */
+export async function expandNeo4jGraph(nodeName: string): Promise<any> {
+    const targetUrl = `${API_BASE_URL}/graph/extend?nodeName=${encodeURIComponent(nodeName)}`;
+    console.log(`// [AJAX Request] GET ${targetUrl}`);
+
+    try {
+        const response = await fetch(targetUrl, {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`节点扩展接口报错: ${response.status} ${response.statusText}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('扩展图谱节点失败:', error);
+        throw error;
+    }
+}
+
+/**
  * 流式对话接口
  */
 export async function streamChatCompletion(
@@ -85,35 +141,28 @@ export async function streamChatCompletion(
             buffer += chunk;
 
             const lines = buffer.split('\n');
-            // 保留最后一个可能不完整的行
             buffer = lines.pop() || '';
 
             for (const line of lines) {
-                // 如果是空行，可能是 SSE 的心跳或消息分隔符，跳过
                 if (line.trim() === '') continue;
 
                 if (line.startsWith('data:')) {
-                    // [修复关键点 1] 不要使用 trim()，因为 token 可能以空格开头或结尾（如 " hello"）
-                    // SSE 规范：如果冒号后有空格，去除第一个空格，保留后续内容
                     let rawData = line.slice(5);
                     if (rawData.startsWith(' ')) {
                         rawData = rawData.slice(1);
                     }
 
-                    // 如果是结束标记
                     if (rawData.trim() === '[DONE]') continue;
 
                     try {
-                        // 1. 尝试解析为 JSON
                         const json = JSON.parse(rawData);
-
                         let content = '';
                         if (typeof json === 'string') {
                             content = json;
                         } else if (json.content) {
-                            content = json.content; // 标准结构
+                            content = json.content;
                         } else if (json.choices && json.choices[0]?.delta?.content) {
-                            content = json.choices[0].delta.content; // OpenAI 格式
+                            content = json.choices[0].delta.content;
                         } else if (json.output && json.output.content) {
                             content = json.output.content;
                         }
@@ -121,18 +170,12 @@ export async function streamChatCompletion(
                         if (content) onChunk(content, []);
 
                     } catch (e) {
-                        // 2. 解析失败则视为纯文本流
-                        // [修复关键点 2] 绝对不要在这里加 '\n'！
-                        // 流式传输的是 token，"你", "好", "吗" 应该直接拼接为 "你好吗"
-                        // 只有当 rawData 本身包含 \n 字符时，才会有换行
                         onChunk(rawData, []);
                     }
                 }
             }
         }
-
         onDone();
-
     } catch (error) {
         console.error('流式请求失败:', error);
         onError(error);

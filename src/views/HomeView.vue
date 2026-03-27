@@ -10,9 +10,7 @@
         class="!bg-[#f9f9fa]"
     >
       <div class="flex flex-col h-full">
-        <!-- 侧边栏头部：新建会话 -->
         <div class="p-4">
-          <!-- [AJAX Trigger] 新建会话按钮 -->
           <n-button dashed block class="!justify-start !h-10 mb-4" @click="handleNewChat">
             <template #icon>
               <n-icon><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg></n-icon>
@@ -21,7 +19,6 @@
           </n-button>
         </div>
 
-        <!-- 历史记录列表 (Mock) -->
         <div class="flex-1 overflow-y-auto px-2">
           <div class="text-xs text-gray-400 font-medium px-2 mb-2">最近记录</div>
           <div
@@ -38,13 +35,11 @@
           </div>
         </div>
 
-        <!-- 用户信息底部 -->
         <div class="p-4 border-t border-gray-200 flex items-center gap-3">
           <n-avatar round size="small" :src="user.avatar" />
           <div class="flex-1 min-w-0">
             <div class="text-sm font-medium truncate">{{ user.name }}</div>
           </div>
-          <!-- 退出登录 -->
           <n-button text @click="$emit('logout')">
             <n-icon size="18"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15M12 9l-3 3m0 0 3 3m-3-3h12.75" /></svg></n-icon>
           </n-button>
@@ -55,16 +50,15 @@
     <n-layout class="bg-gray-50 h-full">
       <div class="flex flex-col h-full relative">
         <!-- 2. 顶部导航栏 -->
-        <header class="h-14 bg-white/80 backdrop-blur border-b flex items-center justify-between px-6 shadow-sm z-10 sticky top-0">
+        <header class="h-14 bg-white/80 backdrop-blur border-b flex items-center justify-between px-6 shadow-sm z-10 sticky top-0 shrink-0">
           <div class="flex items-center gap-3">
-            <h1 class="text-lg font-bold text-gray-800">通信原理智能助教</h1>
+            <h1 class="text-lg font-bold text-gray-800">通信原理智能问答系统</h1>
             <n-tag type="info" size="small" round :bordered="false" class="!bg-blue-50 !text-blue-600">
-              GPT-4o Enhanced
+              qwen3-bupt
             </n-tag>
           </div>
 
           <div class="flex items-center gap-2">
-            <!-- [AJAX Trigger] 清除记忆按钮 -->
             <n-popconfirm @positive-click="handleClearMemory">
               <template #trigger>
                 <n-button quaternary size="small" type="warning">
@@ -79,45 +73,69 @@
           </div>
         </header>
 
-        <!-- 3. 聊天主区域 -->
-        <main class="flex-1 overflow-y-auto p-4 scroll-smooth" ref="chatContainer">
-          <div class="max-w-3xl mx-auto min-h-full pb-4">
-            <!-- 欢迎界面 -->
-            <div v-if="chatList.length === 0" class="flex flex-col items-center justify-center mt-20 text-gray-400 space-y-6 select-none">
-              <div class="w-20 h-20 bg-white rounded-2xl shadow-sm flex items-center justify-center">
-                <span class="text-4xl">📡</span>
+        <!-- 3. 动态分栏的主区域：一分为二的设计 -->
+        <div class="flex-1 flex overflow-hidden">
+          <!-- 左侧：聊天主区域 -->
+          <main class="flex-1 overflow-y-auto p-4 scroll-smooth transition-all duration-300 relative"
+                :class="{ 'max-w-[50%] border-r border-gray-200': currentMindMapData }"
+                ref="chatContainer">
+            <div class="max-w-3xl mx-auto min-h-full pb-4">
+              <!-- 欢迎界面 -->
+              <div v-if="chatList.length === 0" class="flex flex-col items-center justify-center mt-20 text-gray-400 space-y-6 select-none">
+                <div class="w-20 h-20 bg-white rounded-2xl shadow-sm flex items-center justify-center">
+                  <span class="text-4xl">📡</span>
+                </div>
+                <div class="text-center">
+                  <h2 class="text-xl font-bold text-gray-700 mb-2">有什么可以帮你的吗？</h2>
+                  <p class="text-sm">支持深度思考、思维导图生成以及 RAG 知识库检索</p>
+                </div>
+                <div class="grid grid-cols-2 gap-3 w-full max-w-lg mt-8">
+                  <div @click="quickAsk('香农公式的物理意义是什么？')" class="bg-white p-3 rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 cursor-pointer transition text-sm text-gray-600">
+                    📖 香农公式的物理意义
+                  </div>
+                  <div @click="quickAsk('请生成QAM调制的思维导图')" class="bg-white p-3 rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 cursor-pointer transition text-sm text-gray-600">
+                    🗺️ 生成 QAM 调制思维导图
+                  </div>
+                  <div @click="quickAsk('解释一下眼图及其作用')" class="bg-white p-3 rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 cursor-pointer transition text-sm text-gray-600">
+                    👁️ 解释眼图及其作用
+                  </div>
+                  <div @click="quickAsk('PCM编码的三个步骤')" class="bg-white p-3 rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 cursor-pointer transition text-sm text-gray-600">
+                    🔢 PCM 编码步骤
+                  </div>
+                </div>
               </div>
-              <div class="text-center">
-                <h2 class="text-xl font-bold text-gray-700 mb-2">有什么可以帮你的吗？</h2>
-                <p class="text-sm">支持深度思考、思维导图生成以及 RAG 知识库检索</p>
-              </div>
-              <div class="grid grid-cols-2 gap-3 w-full max-w-lg mt-8">
-                <div @click="quickAsk('香农公式的物理意义是什么？')" class="bg-white p-3 rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 cursor-pointer transition text-sm text-gray-600">
-                  📖 香农公式的物理意义
-                </div>
-                <div @click="quickAsk('请生成QAM调制的思维导图')" class="bg-white p-3 rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 cursor-pointer transition text-sm text-gray-600">
-                  🗺️ 生成 QAM 调制思维导图
-                </div>
-                <div @click="quickAsk('解释一下眼图及其作用')" class="bg-white p-3 rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 cursor-pointer transition text-sm text-gray-600">
-                  👁️ 解释眼图及其作用
-                </div>
-                <div @click="quickAsk('PCM编码的三个步骤')" class="bg-white p-3 rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 cursor-pointer transition text-sm text-gray-600">
-                  🔢 PCM 编码步骤
-                </div>
-              </div>
-            </div>
 
-            <MessageBubble
-                v-for="msg in chatList"
-                :key="msg.id"
-                :message="msg"
-            />
-          </div>
-        </main>
+              <MessageBubble
+                  v-for="msg in chatList"
+                  :key="msg.id"
+                  :message="msg"
+              />
+            </div>
+          </main>
+
+          <!-- 右侧：知识图谱区域 -->
+          <aside v-if="currentMindMapData" class="flex-1 bg-white flex flex-col shadow-inner transition-all duration-300 animate-fade-in-right">
+            <div class="h-12 border-b border-gray-100 flex items-center justify-between px-4 bg-gray-50">
+              <span class="text-sm font-bold text-gray-600 flex items-center gap-2">
+                <span class="text-base">🧠</span> Neo4j 知识图谱提取
+                <n-tag size="small" type="success" :bordered="false">双击节点展开关联</n-tag>
+              </span>
+              <n-button text circle size="small" @click="currentMindMapData = null">
+                <template #icon>
+                  <n-icon size="18"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></n-icon>
+                </template>
+              </n-button>
+            </div>
+            <!-- 渲染我们刚刚写的 Echarts 图谱组件 -->
+            <div class="flex-1 relative w-full h-full p-2">
+              <Neo4jGraph :graph-data="currentMindMapData" />
+            </div>
+          </aside>
+        </div>
 
         <!-- 4. 底部输入区 -->
-        <footer class="bg-white border-t p-4 pb-6">
-          <div class="max-w-3xl mx-auto">
+        <footer class="bg-white border-t p-4 pb-6 shrink-0 z-20">
+          <div class="max-w-3xl mx-auto" :class="{'max-w-none px-6': currentMindMapData}">
             <div class="relative bg-white border border-gray-200 rounded-xl shadow-sm focus-within:ring-2 focus-within:ring-blue-100 focus-within:border-blue-400 transition-all overflow-hidden">
 
               <n-input
@@ -134,7 +152,7 @@
               <!-- 功能工具栏 (Toolbar) -->
               <div class="absolute bottom-2 left-2 right-2 flex items-center justify-between">
                 <div class="flex items-center gap-3 ml-1">
-                  <!-- [UI Control] 深度思考开关 -->
+                  <!-- 深度思考开关 -->
                   <n-tooltip trigger="hover">
                     <template #trigger>
                       <div class="flex items-center gap-1.5 cursor-pointer px-2 py-1 rounded hover:bg-gray-100 transition"
@@ -147,7 +165,7 @@
                     开启后模型将进行更深入的逻辑推理
                   </n-tooltip>
 
-                  <!-- [UI Control] 思维导图开关 -->
+                  <!-- 思维导图开关 -->
                   <n-tooltip trigger="hover">
                     <template #trigger>
                       <div class="flex items-center gap-1.5 cursor-pointer px-2 py-1 rounded hover:bg-gray-100 transition"
@@ -160,7 +178,7 @@
                         <span class="text-xs font-medium">思维导图</span>
                       </div>
                     </template>
-                    请求生成 Mermaid 格式的思维导图
+                    请求生成 Neo4j 图谱模型并分屏展示
                   </n-tooltip>
                 </div>
 
@@ -193,38 +211,35 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, onMounted } from 'vue';
+import { ref, nextTick } from 'vue';
 import {
   NButton, NInput, NTag, useMessage, NLayout, NLayoutSider,
   NIcon, NAvatar, NSwitch, NTooltip, NPopconfirm
 } from 'naive-ui';
 import MessageBubble from '../components/Chat/MessageBubble.vue';
-import { streamChatCompletion, createNewSession, clearSessionMemory } from '../api/chatService';
+import Neo4jGraph from '../components/Chat/Neo4jGraph.vue'; // 引入新写的图谱组件
+import { streamChatCompletion, createNewSession, clearSessionMemory, fetchNeo4jGraph } from '../api/chatService';
 import type { ChatMessage, UserInfo, ChatSession } from '../types/chat';
 
-// Props received from App.vue (Login info)
 const props = defineProps<{ user: UserInfo }>();
 const emit = defineEmits(['logout']);
 
-// 状态定义
 const messageApi = useMessage();
 const inputValue = ref('');
 const chatList = ref<ChatMessage[]>([]);
 const isGenerating = ref(false);
 const chatContainer = ref<HTMLElement | null>(null);
 
-// 功能开关状态
 const enableDeepThink = ref(false);
 const enableMindMap = ref(false);
+const currentMindMapData = ref<any>(null); // 保存当前的图谱数据用于渲染
 
-// 会话管理
 const currentSessionId = ref('default');
 const historyList = ref<ChatSession[]>([
   { id: '1', title: '香农公式讨论', lastTime: Date.now() },
   { id: '2', title: '数字调制技术', lastTime: Date.now() - 86400000 },
 ]);
 
-// 滚动到底部
 const scrollToBottom = async () => {
   await nextTick();
   if (chatContainer.value) {
@@ -232,46 +247,35 @@ const scrollToBottom = async () => {
   }
 };
 
-// 快捷提问
 const quickAsk = (text: string) => {
   inputValue.value = text;
   handleSend();
 };
 
-/**
- * [AJAX Action] 新建会话
- */
 const handleNewChat = async () => {
   try {
     const newSessionId = await createNewSession();
     currentSessionId.value = newSessionId;
-    chatList.value = []; // 清空界面消息
-    // 添加到历史记录 (Mock)
-    historyList.value.unshift({
-      id: newSessionId,
-      title: '新对话',
-      lastTime: Date.now()
-    });
+    chatList.value = [];
+    currentMindMapData.value = null; // 重置界面
+    historyList.value.unshift({ id: newSessionId, title: '新对话', lastTime: Date.now() });
     messageApi.success('已创建新会话');
   } catch (e) {
     messageApi.error('创建会话失败');
   }
 };
 
-/**
- * [AJAX Action] 清除记忆
- */
 const handleClearMemory = async () => {
   try {
     await clearSessionMemory(currentSessionId.value);
     chatList.value = [];
+    currentMindMapData.value = null; // 清除时也重置视图
     messageApi.success('记忆已清除，开启新话题');
   } catch (e) {
     messageApi.error('清除失败');
   }
 };
 
-// 发送处理逻辑
 const handleSend = async (e?: KeyboardEvent) => {
   if (e && e.shiftKey) return;
   if (!inputValue.value.trim() || isGenerating.value) return;
@@ -279,7 +283,6 @@ const handleSend = async (e?: KeyboardEvent) => {
   const userText = inputValue.value;
   inputValue.value = '';
 
-  // 1. UI添加用户消息
   const userMsg: ChatMessage = {
     id: Date.now().toString(),
     role: 'user',
@@ -289,7 +292,6 @@ const handleSend = async (e?: KeyboardEvent) => {
   chatList.value.push(userMsg);
   await scrollToBottom();
 
-  // 2. UI预占位 Assistant 消息
   const assistantMsgId = (Date.now() + 1).toString();
   const assistantMsg = ref<ChatMessage>({
     id: assistantMsgId,
@@ -298,48 +300,52 @@ const handleSend = async (e?: KeyboardEvent) => {
     timestamp: Date.now(),
     isLoading: true,
     sources: [],
-    // 传递UI状态，MessageBubble组件可以根据这些状态渲染特殊样式(如思维导图的Loading状态)
     hasMindMap: enableMindMap.value,
     thinkingContent: enableDeepThink.value ? '正在深度思考...\n' : undefined
   });
   chatList.value.push(assistantMsg.value);
 
-  // 3. 调用 API
-  isGenerating.value = true;
+  // ============================================
+  // [请求新增位置] 如果开启了思维导图，向新的后端接口发起请求
+  // ============================================
+  if (enableMindMap.value) {
+    currentMindMapData.value = null; // 发起前重置旧数据
+    fetchNeo4jGraph(userText).then(data => {
+      currentMindMapData.value = data; // 赋值后，右侧面板会自动弹出来进行一分为二渲染
+    }).catch(err => {
+      console.error(err);
+      messageApi.error('获取知识图谱失败');
+    });
+  }
 
+  isGenerating.value = true;
   await streamChatCompletion(
       chatList.value.slice(0, -1),
       {
-        // [AJAX Params] 将开关状态传递给API层
         enableDeepThink: enableDeepThink.value,
         enableMindMap: enableMindMap.value,
         sessionId: currentSessionId.value
       },
       (textChunk, sources) => {
         assistantMsg.value.content += textChunk;
-        if (sources) {
-          assistantMsg.value.sources = sources;
-        }
+        if (sources) assistantMsg.value.sources = sources;
         scrollToBottom();
       },
       () => {
         assistantMsg.value.isLoading = false;
         isGenerating.value = false;
-        // 自动提取标题逻辑略...
       },
       (err) => {
         assistantMsg.value.isLoading = false;
         assistantMsg.value.content += '\n\n[系统提示: 生成出错]';
         isGenerating.value = false;
         messageApi.error('网络请求失败');
-        console.error(err);
       }
   );
 };
 </script>
 
 <style scoped>
-/* 自定义滚动条样式 */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -353,5 +359,21 @@ const handleSend = async (e?: KeyboardEvent) => {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
+}
+
+/* 右侧弹出动画 */
+.animate-fade-in-right {
+  animation: fadeInRight 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes fadeInRight {
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 </style>
